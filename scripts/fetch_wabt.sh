@@ -11,12 +11,9 @@ case "$(uname -s)" in
   *) echo "unsupported platform $(uname -s)" >&2; exit 1 ;;
 esac
 
-BIN="third_party/wabt/wabt-$WABT_VERSION/bin"
-if [ -x "$BIN/wast2json" ] || [ -x "$BIN/wast2json.exe" ]; then
-  echo "wabt $WABT_VERSION already present"
-  exit 0
-fi
-
+# Always download and re-verify: a pre-existing binary is trusted only by
+# filename, which is not evidence it matches the pinned release.
+rm -rf third_party/wabt
 mkdir -p third_party/wabt
 TARBALL="third_party/wabt/wabt.tar.gz"
 curl -sL -o "$TARBALL" \

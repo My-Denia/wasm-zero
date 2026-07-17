@@ -90,6 +90,14 @@ fn main() -> ExitCode {
         }
     };
     files.sort();
+    if files.is_empty() {
+        // An empty corpus must never look like a green sweep.
+        eprintln!(
+            "error: no corpus JSON files found under {}",
+            args.dir.display()
+        );
+        return ExitCode::from(2);
+    }
     if !args.only.is_empty() {
         files.retain(|p| {
             let name = p.file_name().unwrap().to_string_lossy();

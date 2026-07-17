@@ -10,12 +10,18 @@ SPEC_SHA="fffc6e12fa454e475455a7b58d3b5dc343980c10"
 
 if [ -d third_party/spec ]; then
   have=$(git -C third_party/spec rev-parse HEAD)
-  if [ "$have" = "$SPEC_SHA" ]; then
-    echo "spec already at $SPEC_SHA"
-    exit 0
+  if [ "$have" != "$SPEC_SHA" ]; then
+    echo "spec present at wrong SHA ($have), refusing to touch it" >&2
+    exit 1
   fi
-  echo "spec present at wrong SHA ($have), refusing to touch it" >&2
-  exit 1
+  # A cached checkout is only trustworthy if it is pristine: modified
+  # corpus files must never masquerade as the pinned suite.
+  if [ -n "$(git -C third_party/spec status --porcelain)" ]; then
+    echo "spec checkout at $SPEC_SHA is dirty, refusing to use it" >&2
+    exit 1
+  fi
+  echo "spec already at $SPEC_SHA (clean)"
+  exit 0
 fi
 
 mkdir -p third_party

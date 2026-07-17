@@ -39,9 +39,12 @@ pub(crate) fn invoke(
     args: &[Value],
 ) -> Result<Vec<Value>, InvokeError> {
     match &store.funcs[func_addr] {
-        FuncInst::Host { func, .. } => {
+        FuncInst::Host { ty, func } => {
             let f = *func;
-            f(args).map_err(InvokeError::Trap)
+            let results_ty = ty.results.clone();
+            let results = f(args).map_err(InvokeError::Trap)?;
+            check_host_results(&results_ty, &results).map_err(InvokeError::Trap)?;
+            Ok(results)
         }
         FuncInst::Wasm { .. } => {
             let mut m = Machine {
@@ -589,8 +592,15 @@ impl<'s> Machine<'s> {
                 let max = u64::from(mem.ty.limits.max.unwrap_or(MAX_PAGES).min(MAX_PAGES));
                 match mem_bytes(new as u32) {
                     Some(bytes) if new <= max => {
-                        mem.data.resize(bytes, 0);
-                        self.push_i32(old);
+                        // Allocation failure must surface as the spec's
+                        // -1 result, not an OOM abort.
+                        let additional = bytes - mem.data.len();
+                        if mem.data.try_reserve_exact(additional).is_ok() {
+                            mem.data.resize(bytes, 0);
+                            self.push_i32(old);
+                        } else {
+                            self.push_i32(u32::MAX);
+                        }
                     }
                     _ => self.push_i32(u32::MAX),
                 }
@@ -672,8 +682,10 @@ impl<'s> Machine<'s> {
             FuncInst::Host { ty, func } => {
                 let f = *func;
                 let n = ty.params.len();
+                let results_ty = ty.results.clone();
                 let args: Vec<Value> = self.stack.split_off(self.stack.len() - n);
                 let results = f(&args)?;
+                check_host_results(&results_ty, &results)?;
                 self.stack.extend(results);
                 Ok(())
             }
@@ -1161,6 +1173,15 @@ enum Flow {
     Next,
     Jump(usize),
     Returned,
+}
+
+/// A host callback's results are untrusted: enforce its declared result
+/// arity and types before they land on the validated Wasm stack.
+fn check_host_results(want: &[crate::types::ValType], got: &[Value]) -> Exec {
+    if got.len() != want.len() || got.iter().zip(want).any(|(v, t)| v.ty() != *t) {
+        return Err(trap("host function result type mismatch"));
+    }
+    Ok(())
 }
 
 // ---- float min/max per spec (NaN wins, -0 < +0) ----

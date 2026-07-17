@@ -228,10 +228,14 @@ fn perform_action(ctx: &mut Ctx, cmd: &J) -> Result<Vec<Value>, String> {
     }
     let field = str_field(action, "field")?;
     let mut args = Vec::new();
-    if let Some(arr) = action.get("args").and_then(|a| a.as_array()) {
-        for a in arr {
-            args.push(parse_value(a)?);
+    match action.get("args") {
+        None => {}
+        Some(J::Array(arr)) => {
+            for a in arr {
+                args.push(parse_value(a)?);
+            }
         }
+        Some(other) => return Err(format!("malformed args field (fail-closed): {other}")),
     }
     let inst = ctx.resolve_instance(action)?;
     match ty {

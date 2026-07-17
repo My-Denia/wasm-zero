@@ -64,3 +64,7 @@
 ## 2026-07-17T23:14:38+00:00
 
 - SubagentStop: agent_type=codex:codex-rescue agent_id=a6d395741d447cdb2 tool_calls=? decision=no-decision
+
+## 2026-07-17T23:18:51+00:00
+
+- SubagentStop: agent_type=unknown agent_id=a3cf2a6a9847562bd tool_calls=? decision=no-decision

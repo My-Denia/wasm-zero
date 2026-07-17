@@ -61,6 +61,15 @@ def main() -> int:
             if got != want:
                 ok = False
             print(f"CROSS-CHECK {name}: ledger={got} enum={want} {status}")
+        # The ledger's file set must be exactly the corpus file set
+        # (no omissions, no duplicates), not merely count-compatible.
+        ledger_names = [lf["file"] for lf in ledger["files"]]
+        if sorted(ledger_names) != sorted(per_file):
+            missing = sorted(set(per_file) - set(ledger_names))
+            extra = sorted(set(ledger_names) - set(per_file))
+            dupes = sorted({n for n in ledger_names if ledger_names.count(n) > 1})
+            print(f"CROSS-CHECK file-set MISMATCH: missing={missing} extra={extra} dupes={dupes}")
+            ok = False
         for lf in ledger["files"]:
             want = per_file.get(lf["file"])
             if want is None or lf["total"] != want:

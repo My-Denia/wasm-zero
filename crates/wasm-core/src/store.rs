@@ -129,7 +129,7 @@ impl Store {
             let addr = self.tables.len();
             self.tables.push(TableInst {
                 ty,
-                elems: vec![Value::FuncRef(None); ty.limits.min as usize],
+                elems: vec![Value::null_of(ty.elem); ty.limits.min as usize],
             });
             inst.exports.push((name, ExternVal::Table(addr)));
             inst.table_addrs.push(addr);
