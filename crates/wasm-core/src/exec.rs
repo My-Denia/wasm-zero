@@ -43,7 +43,8 @@ pub(crate) fn invoke(
             let f = *func;
             let results_ty = ty.results.clone();
             let results = f(args).map_err(InvokeError::Trap)?;
-            check_host_results(&results_ty, &results).map_err(InvokeError::Trap)?;
+            check_host_results(&results_ty, &results, store.funcs.len())
+                .map_err(InvokeError::Trap)?;
             Ok(results)
         }
         FuncInst::Wasm { .. } => {
@@ -52,6 +53,7 @@ pub(crate) fn invoke(
                 stack: Vec::new(),
                 frames: Vec::new(),
                 ctrls: Vec::new(),
+                locals_total: 0,
             };
             m.stack.extend_from_slice(args);
             m.push_frame(func_addr)
@@ -66,6 +68,9 @@ pub(crate) struct Machine<'s> {
     stack: Vec<Value>,
     frames: Vec<Frame>,
     ctrls: Vec<Ctrl>,
+    /// Total locals held by all active frames, counted toward the value
+    /// budget so deep recursion with large locals traps deterministically.
+    locals_total: usize,
 }
 
 type Exec = Result<(), Trap>;
@@ -163,9 +168,10 @@ impl<'s> Machine<'s> {
         for lt in &code.locals {
             locals.push(Value::default_for(*lt));
         }
-        if self.stack.len() + locals.len() > MAX_VALUE_STACK {
+        if self.stack.len() + self.locals_total + locals.len() > MAX_VALUE_STACK {
             return Err(trap("call stack exhausted"));
         }
+        self.locals_total += locals.len();
         let body_len = code.body.len();
         self.frames.push(Frame {
             code,
@@ -188,6 +194,7 @@ impl<'s> Machine<'s> {
     /// Pop the current frame, transferring `results` top values.
     fn pop_frame(&mut self) {
         let f = self.frames.pop().expect("frame");
+        self.locals_total -= f.locals.len();
         let keep = self.stack.split_off(self.stack.len() - f.results);
         self.stack.truncate(f.base);
         self.stack.extend(keep);
@@ -227,6 +234,7 @@ impl<'s> Machine<'s> {
 
     fn pop_frame_via_branch(&mut self, _arity: usize) {
         let f = self.frames.pop().expect("frame");
+        self.locals_total -= f.locals.len();
         let keep = self.stack.split_off(self.stack.len() - f.results);
         self.stack.truncate(f.base);
         self.stack.extend(keep);
@@ -490,7 +498,11 @@ impl<'s> Machine<'s> {
                 let max = tbl.ty.limits.max.map_or(u64::from(u32::MAX), u64::from);
                 // Growth beyond the implementation limit fails with -1,
                 // which the spec explicitly permits for table.grow.
-                if new > max || new > TABLE_IMPL_LIMIT {
+                let additional = (new as usize).saturating_sub(tbl.elems.len());
+                if new > max
+                    || new > TABLE_IMPL_LIMIT
+                    || tbl.elems.try_reserve_exact(additional).is_err()
+                {
                     self.push_i32(u32::MAX);
                 } else {
                     tbl.elems.resize(new as usize, v);
@@ -685,7 +697,7 @@ impl<'s> Machine<'s> {
                 let results_ty = ty.results.clone();
                 let args: Vec<Value> = self.stack.split_off(self.stack.len() - n);
                 let results = f(&args)?;
-                check_host_results(&results_ty, &results)?;
+                check_host_results(&results_ty, &results, self.store.funcs.len())?;
                 self.stack.extend(results);
                 Ok(())
             }
@@ -1176,10 +1188,18 @@ enum Flow {
 }
 
 /// A host callback's results are untrusted: enforce its declared result
-/// arity and types before they land on the validated Wasm stack.
-fn check_host_results(want: &[crate::types::ValType], got: &[Value]) -> Exec {
+/// arity and types, and reject forged function references, before they
+/// land on the validated Wasm stack.
+fn check_host_results(want: &[crate::types::ValType], got: &[Value], num_funcs: usize) -> Exec {
     if got.len() != want.len() || got.iter().zip(want).any(|(v, t)| v.ty() != *t) {
         return Err(trap("host function result type mismatch"));
+    }
+    for v in got {
+        if let Value::FuncRef(Some(a)) = v {
+            if *a as usize >= num_funcs {
+                return Err(trap("host function returned invalid function reference"));
+            }
+        }
     }
     Ok(())
 }

@@ -9,6 +9,9 @@ W="third_party/wabt/wabt-1.0.41/bin/wast2json"
 [ -x "$W" ] || W="$W.exe"
 [ -x "$W" ] || { echo "wast2json missing; run scripts/fetch_wabt.sh" >&2; exit 1; }
 
+# Recreate the output directory so stale artifacts from earlier runs can
+# never ride along into the accounted corpus.
+rm -rf build/wast-json
 mkdir -p build/wast-json
 ok=0; bad=0
 for f in third_party/spec/test/core/*.wast; do

@@ -34,9 +34,16 @@
 - 负向 C（runner fail-closed）：合成 JSON（未知命令类型/未知 action 类型/未知值类型/未知 module_type）→ `negctl-c.log`：4/4 FAIL 且原因逐条为 fail-closed 拒绝，RUNNER_EXIT=1。
 - 全部注入均在 clean tree 上进行，验证后 `git checkout --` 恢复并重跑全量确认绿色。
 
-## AC5 — CI（见 M6 完成后补充 run 链接）
+## AC5 — CI
 
-## AC6 — 工程化交付（fresh checkout 复现记录于 handoff.md，M7 执行）
+- 首次 CI 抓出真实跨平台缺陷：Linux glibc 路径 ceil/floor/trunc/nearest 对 SNaN 不置 quiet 位 → 32 条 nan:arithmetic FAIL；修复（显式 quiet + 回归单测）后双平台 FAIL=0
+- 绿色 run：https://github.com/My-Denia/wasm-zero/actions/runs/29620342062（NaN 修复后）与 https://github.com/My-Denia/wasm-zero/actions/runs/29620854353（Codex 评审修复后）——含全量 sweep 硬门禁 + 独立枚举核对
+- 前两次 CI 失败（脚本执行位 rc=126、NaN 分歧）及修复过程记录于 execution-log
+
+## AC6 — 工程化交付
+
+- fresh-checkout 复现（合并前预演，远端分支克隆到独立目录）：`git clone → scripts/fetch_spec.sh → scripts/fetch_wabt.sh → scripts/convert_corpus.sh → cargo run --release -p spec-runner -- --expect-total 54006 --expect-unsupported 1091` → SWEEP_EXIT=0；`enum_corpus.py` → ENUM_EXIT=0
+- 合并后将对 main 重复一次作为最终 AC6 证据
 
 ## AC7 — 审计闭环
 

@@ -65,7 +65,9 @@ pub fn run_file(path: &Path) -> Result<FileResult, String> {
         .ok_or("missing commands array")?;
 
     let mut store = Store::new();
-    let spectest = store.add_host_module(spectest_module());
+    let spectest = store
+        .add_host_module(spectest_module())
+        .map_err(|e| format!("spectest host module: {e}"))?;
     let mut ctx = Ctx {
         store,
         registry: HashMap::from([("spectest".to_string(), spectest)]),
@@ -189,8 +191,17 @@ fn cmd_module(ctx: &mut Ctx, cmd: &J) -> Verdict {
     match build_instance(ctx, &bytes) {
         Ok(id) => {
             ctx.current = Some(id);
-            if let Some(J::String(name)) = cmd.get("name") {
-                ctx.named.insert(name.clone(), id);
+            match cmd.get("name") {
+                None => {}
+                Some(J::String(name)) => {
+                    ctx.named.insert(name.clone(), id);
+                }
+                Some(other) => {
+                    ctx.current = None;
+                    return Verdict::Fail(format!(
+                        "malformed module name field (fail-closed): {other}"
+                    ));
+                }
             }
             Verdict::Pass
         }
@@ -209,7 +220,18 @@ fn cmd_register(ctx: &mut Ctx, cmd: &J) -> Verdict {
         Ok(s) => s.to_string(),
         Err(e) => return Verdict::Fail(e),
     };
-    match ctx.resolve_instance(cmd) {
+    // wast2json identifies the source module of a register command via
+    // its "name" field (not "module").
+    let inst = match cmd.get("name") {
+        None => ctx.current.ok_or("no current module".to_string()),
+        Some(J::String(name)) => ctx
+            .named
+            .get(name)
+            .copied()
+            .ok_or(format!("unknown module name {name}")),
+        Some(other) => Err(format!("malformed name field (fail-closed): {other}")),
+    };
+    match inst {
         Ok(inst) => {
             ctx.registry.insert(as_name, inst);
             Verdict::Pass
@@ -227,15 +249,23 @@ fn perform_action(ctx: &mut Ctx, cmd: &J) -> Result<Vec<Value>, String> {
         return Err(format!("unknown action type {ty:?} (fail-closed)"));
     }
     let field = str_field(action, "field")?;
+    // Action-shape strictness: invoke requires an args array (possibly
+    // empty); get must not carry arguments.
     let mut args = Vec::new();
-    match action.get("args") {
-        None => {}
-        Some(J::Array(arr)) => {
+    match (ty, action.get("args")) {
+        ("invoke", Some(J::Array(arr))) => {
             for a in arr {
                 args.push(parse_value(a)?);
             }
         }
-        Some(other) => return Err(format!("malformed args field (fail-closed): {other}")),
+        ("invoke", other) => return Err(format!("malformed invoke args (fail-closed): {other:?}")),
+        ("get", None) => {}
+        ("get", Some(other)) => {
+            return Err(format!(
+                "unexpected args on get action (fail-closed): {other}"
+            ))
+        }
+        _ => unreachable!("action type checked above"),
     }
     let inst = ctx.resolve_instance(action)?;
     match ty {

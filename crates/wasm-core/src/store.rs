@@ -111,7 +111,7 @@ impl Store {
         Store::default()
     }
 
-    pub fn add_host_module(&mut self, desc: HostModule) -> InstanceId {
+    pub fn add_host_module(&mut self, desc: HostModule) -> Result<InstanceId, String> {
         let mut inst = Instance::default();
         for (name, ty, func) in desc.funcs {
             let addr = self.funcs.len();
@@ -120,6 +120,16 @@ impl Store {
             inst.func_addrs.push(addr);
         }
         for (name, ty, val) in desc.globals {
+            // Host-supplied values are untrusted with respect to engine
+            // invariants: a declared/actual type mismatch would later
+            // panic typed stack helpers inside validated code.
+            if val.ty() != ty.val {
+                return Err(format!(
+                    "host global {name}: value type {:?} != declared {:?}",
+                    val.ty(),
+                    ty.val
+                ));
+            }
             let addr = self.globals.len();
             self.globals.push(GlobalInst { ty, val });
             inst.exports.push((name, ExternVal::Global(addr)));
@@ -136,7 +146,7 @@ impl Store {
         }
         for (name, ty) in desc.mems {
             let addr = self.mems.len();
-            let bytes = mem_bytes(ty.limits.min).expect("host memory size");
+            let bytes = mem_bytes(ty.limits.min).ok_or("host memory size overflow")?;
             self.mems.push(MemInst {
                 ty,
                 data: vec![0; bytes],
@@ -145,7 +155,7 @@ impl Store {
             inst.mem_addrs.push(addr);
         }
         self.instances.push(inst);
-        self.instances.len() - 1
+        Ok(self.instances.len() - 1)
     }
 
     pub fn instantiate(
@@ -166,6 +176,19 @@ impl Store {
                     imp.module, imp.name
                 )));
             };
+            // The resolver is an untrusted callback: its addresses must be
+            // validated before indexing the store.
+            let in_bounds = match ev {
+                ExternVal::Func(a) => a < self.funcs.len(),
+                ExternVal::Table(a) => a < self.tables.len(),
+                ExternVal::Mem(a) => a < self.mems.len(),
+                ExternVal::Global(a) => a < self.globals.len(),
+            };
+            if !in_bounds {
+                return Err(InstError::Link(
+                    "resolved import address out of bounds".into(),
+                ));
+            }
             match (imp.desc, ev) {
                 (ImportDesc::Func(tidx), ExternVal::Func(addr)) => {
                     let want = &module.types[tidx as usize];
@@ -235,10 +258,12 @@ impl Store {
                     "table size exceeds implementation limit".into(),
                 ));
             }
-            self.tables.push(TableInst {
-                ty: *t,
-                elems: vec![Value::null_of(t.elem); t.limits.min as usize],
-            });
+            let mut elems = Vec::new();
+            if elems.try_reserve_exact(t.limits.min as usize).is_err() {
+                return Err(InstError::Link("cannot allocate table".into()));
+            }
+            elems.resize(t.limits.min as usize, Value::null_of(t.elem));
+            self.tables.push(TableInst { ty: *t, elems });
             inst.table_addrs.push(addr);
         }
         for mt in &module.mems {
@@ -248,10 +273,12 @@ impl Store {
                     "memory size exceeds addressable range".into(),
                 ));
             };
-            self.mems.push(MemInst {
-                ty: *mt,
-                data: vec![0; bytes],
-            });
+            let mut data = Vec::new();
+            if data.try_reserve_exact(bytes).is_err() {
+                return Err(InstError::Link("cannot allocate memory".into()));
+            }
+            data.resize(bytes, 0);
+            self.mems.push(MemInst { ty: *mt, data });
             inst.mem_addrs.push(addr);
         }
 

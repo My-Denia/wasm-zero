@@ -68,3 +68,15 @@
 ## 2026-07-17T23:18:51+00:00
 
 - SubagentStop: agent_type=unknown agent_id=a3cf2a6a9847562bd tool_calls=? decision=no-decision
+
+## 2026-07-17T23:31:49+00:00
+
+- Stop-hook ack #2: still mid-execution awaiting CI + codex rereview + fresh-checkout (all background); execution_gate stays pending until final post-merge audit; not claiming completion
+
+## 2026-07-17T23:32:26+00:00
+
+- CI green on review-fix commit (29620854353); fresh-checkout pre-merge reproduction SWEEP_EXIT=0 ENUM_EXIT=0; awaiting codex rereview
+
+## 2026-07-17T23:32:37+00:00
+
+- SubagentStop: agent_type=unknown agent_id=af4a097dce9ab3092 tool_calls=? decision=no-decision
