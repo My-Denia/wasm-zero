@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Unit tests
+        run: cargo test
+
+      - name: Fetch pinned spec corpus (wg-2.0)
+        run: scripts/fetch_spec.sh
+
+      - name: Fetch pinned WABT (1.0.41, SHA256-verified)
+        run: scripts/fetch_wabt.sh
+
+      - name: Convert corpus (wast2json)
+        run: scripts/convert_corpus.sh
+
+      - name: Full sweep (hard gate FAIL=0, frozen constants)
+        run: |
+          cargo run --release -p spec-runner -- \
+            --expect-total 54006 --expect-unsupported 1091 \
+            --ledger-out build/ledger-ci.json
+
+      - name: Independent enumeration cross-check
+        run: python3 scripts/enum_corpus.py --ledger build/ledger-ci.json
+
+      - name: Upload ledger artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger
+          path: build/ledger-ci.json
