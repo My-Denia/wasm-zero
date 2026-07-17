@@ -16,3 +16,7 @@
 ## 2026-07-17T16:38:28+00:00
 
 - M2 done: malformed(binary)+invalid FAIL=0; unit tests 5 pass; commit d3a7181
+
+## 2026-07-17T16:47:01+00:00
+
+- M3 done: core 90 files FAIL=0 (PASS 27437); remaining 24066 FAIL all SIMD; commit 4fd3f20

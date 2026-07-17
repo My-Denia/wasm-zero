@@ -103,7 +103,6 @@ impl<'s> Machine<'s> {
             v => unreachable!("expected f64, got {v:?}"),
         }
     }
-    #[allow(dead_code)] // used by the M4 SIMD implementation
     pub(crate) fn pop_v128(&mut self) -> u128 {
         match self.pop() {
             Value::V128(v) => v,
@@ -130,6 +129,12 @@ impl<'s> Machine<'s> {
     }
     pub(crate) fn push_v128(&mut self, v: u128) {
         self.push(Value::V128(v));
+    }
+    pub(crate) fn pop_value(&mut self) -> Value {
+        self.pop()
+    }
+    pub(crate) fn push_value(&mut self, v: Value) {
+        self.push(v);
     }
     fn push_bool(&mut self, b: bool) {
         self.push_i32(b as u32);
