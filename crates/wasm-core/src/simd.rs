@@ -590,7 +590,7 @@ pub(crate) fn simd_op(m: &mut Machine, op: SimdOp) -> Exec {
         I8x16MinU => zip8(a, b, |x, y| x.min(y)),
         I8x16MaxS => zip8(a, b, |x, y| (x as i8).max(y as i8) as u8),
         I8x16MaxU => zip8(a, b, |x, y| x.max(y)),
-        I8x16AvgrU => zip8(a, b, |x, y| ((u16::from(x) + u16::from(y) + 1) / 2) as u8),
+        I8x16AvgrU => zip8(a, b, |x, y| (u16::from(x) + u16::from(y)).div_ceil(2) as u8),
         I16x8Add => zip16(a, b, u16::wrapping_add),
         I16x8Sub => zip16(a, b, u16::wrapping_sub),
         I16x8Mul => zip16(a, b, u16::wrapping_mul),
@@ -602,7 +602,9 @@ pub(crate) fn simd_op(m: &mut Machine, op: SimdOp) -> Exec {
         I16x8MinU => zip16(a, b, |x, y| x.min(y)),
         I16x8MaxS => zip16(a, b, |x, y| (x as i16).max(y as i16) as u16),
         I16x8MaxU => zip16(a, b, |x, y| x.max(y)),
-        I16x8AvgrU => zip16(a, b, |x, y| ((u32::from(x) + u32::from(y) + 1) / 2) as u16),
+        I16x8AvgrU => zip16(a, b, |x, y| {
+            (u32::from(x) + u32::from(y)).div_ceil(2) as u16
+        }),
         I16x8Q15mulrSatS => zip16(a, b, |x, y| {
             let p = (i32::from(x as i16) * i32::from(y as i16) + 0x4000) >> 15;
             p.clamp(-32768, 32767) as i16 as u16
