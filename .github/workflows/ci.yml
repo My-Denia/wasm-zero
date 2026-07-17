@@ -38,12 +38,14 @@ jobs:
         run: |
           cargo run --release -p spec-runner -- \
             --expect-total 54006 --expect-unsupported 1091 \
+            --verbose-fail \
             --ledger-out build/ledger-ci.json
 
       - name: Independent enumeration cross-check
         run: python3 scripts/enum_corpus.py --ledger build/ledger-ci.json
 
       - name: Upload ledger artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ledger
