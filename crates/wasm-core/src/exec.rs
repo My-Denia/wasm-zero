@@ -896,19 +896,19 @@ impl<'s> Machine<'s> {
             }
             F32Ceil => {
                 let a = self.pop_f32();
-                self.push_f32(a.ceil());
+                self.push_f32(ceil32(a));
             }
             F32Floor => {
                 let a = self.pop_f32();
-                self.push_f32(a.floor());
+                self.push_f32(floor32(a));
             }
             F32Trunc => {
                 let a = self.pop_f32();
-                self.push_f32(a.trunc());
+                self.push_f32(trunc32(a));
             }
             F32Nearest => {
                 let a = self.pop_f32();
-                self.push_f32(a.round_ties_even());
+                self.push_f32(nearest32(a));
             }
             F32Sqrt => {
                 let a = self.pop_f32();
@@ -949,19 +949,19 @@ impl<'s> Machine<'s> {
             }
             F64Ceil => {
                 let a = self.pop_f64();
-                self.push_f64(a.ceil());
+                self.push_f64(ceil64(a));
             }
             F64Floor => {
                 let a = self.pop_f64();
-                self.push_f64(a.floor());
+                self.push_f64(floor64(a));
             }
             F64Trunc => {
                 let a = self.pop_f64();
-                self.push_f64(a.trunc());
+                self.push_f64(trunc64(a));
             }
             F64Nearest => {
                 let a = self.pop_f64();
-                self.push_f64(a.round_ties_even());
+                self.push_f64(nearest64(a));
             }
             F64Sqrt => {
                 let a = self.pop_f64();
@@ -1241,6 +1241,67 @@ fn quiet64(a: f64) -> f64 {
     f64::from_bits(a.to_bits() | 0x0008_0000_0000_0000)
 }
 
+// Rounding operators must return an *arithmetic* (quiet) NaN for NaN
+// inputs. Hardware round instructions do this, but the libm fallbacks on
+// some platforms (e.g. glibc ceilf on SSE2 baseline) return signaling
+// NaNs unchanged — so the quieting is made explicit here.
+pub(crate) fn ceil32(a: f32) -> f32 {
+    if a.is_nan() {
+        quiet32(a)
+    } else {
+        a.ceil()
+    }
+}
+pub(crate) fn floor32(a: f32) -> f32 {
+    if a.is_nan() {
+        quiet32(a)
+    } else {
+        a.floor()
+    }
+}
+pub(crate) fn trunc32(a: f32) -> f32 {
+    if a.is_nan() {
+        quiet32(a)
+    } else {
+        a.trunc()
+    }
+}
+pub(crate) fn nearest32(a: f32) -> f32 {
+    if a.is_nan() {
+        quiet32(a)
+    } else {
+        a.round_ties_even()
+    }
+}
+pub(crate) fn ceil64(a: f64) -> f64 {
+    if a.is_nan() {
+        quiet64(a)
+    } else {
+        a.ceil()
+    }
+}
+pub(crate) fn floor64(a: f64) -> f64 {
+    if a.is_nan() {
+        quiet64(a)
+    } else {
+        a.floor()
+    }
+}
+pub(crate) fn trunc64(a: f64) -> f64 {
+    if a.is_nan() {
+        quiet64(a)
+    } else {
+        a.trunc()
+    }
+}
+pub(crate) fn nearest64(a: f64) -> f64 {
+    if a.is_nan() {
+        quiet64(a)
+    } else {
+        a.round_ties_even()
+    }
+}
+
 // ---- trapping float->int truncation ----
 fn trunc_check(a: f64) -> Result<f64, Trap> {
     if a.is_nan() {
@@ -1302,4 +1363,34 @@ fn trunc_f64_to_u64(a: f64) -> Result<u64, Trap> {
         return Err(trap("integer overflow"));
     }
     Ok(t as u64)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Rounding a signaling NaN must yield an arithmetic (quiet) NaN on
+    // every platform; the glibc SSE2-baseline libm fallbacks return
+    // signaling NaNs unchanged, which CI caught as 32 corpus failures.
+    #[test]
+    fn rounding_quiets_signaling_nans() {
+        let snan32 = f32::from_bits(0x7fa0_0000);
+        for f in [ceil32, floor32, trunc32, nearest32] {
+            let r = f(snan32);
+            assert!(
+                r.is_nan() && r.to_bits() & 0x0040_0000 != 0,
+                "{:#x}",
+                r.to_bits()
+            );
+        }
+        let snan64 = f64::from_bits(0x7ff4_0000_0000_0000);
+        for f in [ceil64, floor64, trunc64, nearest64] {
+            let r = f(snan64);
+            assert!(
+                r.is_nan() && r.to_bits() & 0x0008_0000_0000_0000 != 0,
+                "{:#x}",
+                r.to_bits()
+            );
+        }
+    }
 }

@@ -3,7 +3,10 @@
 //! them as lane arrays.
 
 use crate::error::Trap;
-use crate::exec::{fmax32, fmax64, fmin32, fmin64, Machine};
+use crate::exec::{
+    ceil32, ceil64, floor32, floor64, fmax32, fmax64, fmin32, fmin64, nearest32, nearest64,
+    trunc32, trunc64, Machine,
+};
 use crate::module::{SimdLaneOp, SimdMemOp, SimdOp};
 use crate::values::Value;
 
@@ -342,17 +345,17 @@ pub(crate) fn simd_op(m: &mut Machine, op: SimdOp) -> Exec {
         F32x4Abs => Some(|a| map32(a, |x| x & 0x7fff_ffff)),
         F32x4Neg => Some(|a| map32(a, |x| x ^ 0x8000_0000)),
         F32x4Sqrt => Some(|a| mapf32(a, f32::sqrt)),
-        F32x4Ceil => Some(|a| mapf32(a, f32::ceil)),
-        F32x4Floor => Some(|a| mapf32(a, f32::floor)),
-        F32x4Trunc => Some(|a| mapf32(a, f32::trunc)),
-        F32x4Nearest => Some(|a| mapf32(a, f32::round_ties_even)),
+        F32x4Ceil => Some(|a| mapf32(a, ceil32)),
+        F32x4Floor => Some(|a| mapf32(a, floor32)),
+        F32x4Trunc => Some(|a| mapf32(a, trunc32)),
+        F32x4Nearest => Some(|a| mapf32(a, nearest32)),
         F64x2Abs => Some(|a| map64(a, |x| x & 0x7fff_ffff_ffff_ffff)),
         F64x2Neg => Some(|a| map64(a, |x| x ^ 0x8000_0000_0000_0000)),
         F64x2Sqrt => Some(|a| mapf64(a, f64::sqrt)),
-        F64x2Ceil => Some(|a| mapf64(a, f64::ceil)),
-        F64x2Floor => Some(|a| mapf64(a, f64::floor)),
-        F64x2Trunc => Some(|a| mapf64(a, f64::trunc)),
-        F64x2Nearest => Some(|a| mapf64(a, f64::round_ties_even)),
+        F64x2Ceil => Some(|a| mapf64(a, ceil64)),
+        F64x2Floor => Some(|a| mapf64(a, floor64)),
+        F64x2Trunc => Some(|a| mapf64(a, trunc64)),
+        F64x2Nearest => Some(|a| mapf64(a, nearest64)),
         I16x8ExtendLowI8x16S => Some(|a| {
             let x = b16(a);
             from_u16x8(std::array::from_fn(|i| x[i] as i8 as i16 as u16))

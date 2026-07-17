@@ -52,3 +52,15 @@
 ## 2026-07-17T21:42:27+00:00
 
 - SubagentStop: agent_type=unknown agent_id=ac3c2a9c033265358 tool_calls=? decision=no-decision
+
+## 2026-07-17T23:14:00+00:00
+
+- Stop-hook ack: execution_gate intentionally pending until post-merge final audit; CI watch returned
+
+## 2026-07-17T23:14:20+00:00
+
+- SubagentStop: agent_type=codex:codex-rescue agent_id=a6d395741d447cdb2 tool_calls=? decision=no-decision
+
+## 2026-07-17T23:14:38+00:00
+
+- SubagentStop: agent_type=codex:codex-rescue agent_id=a6d395741d447cdb2 tool_calls=? decision=no-decision
