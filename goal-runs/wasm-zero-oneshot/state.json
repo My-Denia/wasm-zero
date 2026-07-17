@@ -18,7 +18,7 @@
     "reason": ""
   },
   "created_at_utc": "2026-07-17T16:06:13+00:00",
-  "updated_at_utc": "2026-07-17T17:10:45+00:00",
+  "updated_at_utc": "2026-07-17T21:41:37+00:00",
   "acceptance_criteria": [],
   "non_goals": [
     "\u7981\u8bfb wasm-oracle \u4ed3\u5e93(\u672c\u5730+\u8fdc\u7aef)\uff1b\u7981\u8bfb C:/Files/ablation-2arm\uff1b\u4e0d\u6539 C:/Files/wasm\uff1bWasm 3.0 \u7279\u6027(GC/EH/memory64\u7b49)\u4e0d\u5728\u672c\u6b21\u9a8c\u6536\u5185\uff1b\u4e0d\u5f15\u5165\u4ed8\u8d39\u670d\u52a1\uff1bunsigned \u63d0\u4ea4"
@@ -69,6 +69,17 @@
       "decision": "pass",
       "completed_at_utc": "2026-07-17T17:10:45+00:00",
       "artifact_ref": "pre-push-audit-2026-07-17",
+      "summary": ""
+    },
+    {
+      "name": "internal-reviewer-1",
+      "role": "code-review",
+      "required": false,
+      "model": "inherit",
+      "status": "needs-fix",
+      "decision": "needs-fix",
+      "completed_at_utc": "2026-07-17T21:41:37+00:00",
+      "artifact_ref": "review-1: 1xP2+4xP3, all fixed in 4c7996d",
       "summary": ""
     }
   ],

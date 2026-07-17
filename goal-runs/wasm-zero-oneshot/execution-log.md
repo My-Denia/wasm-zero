@@ -44,3 +44,11 @@
 ## 2026-07-17T17:20:21+00:00
 
 - SubagentStop: agent_type=general-purpose agent_id=a592690acec401ea2 tool_calls=? decision=no-decision
+
+## 2026-07-17T21:41:37+00:00
+
+- Internal review #1: no P0/P1; P2 locals-alloc-DoS + 4 P3 fixed in 4c7996d; sweep+lints re-green. User intervention #1 (owner permission): continue authorizes retrying remote ops
+
+## 2026-07-17T21:42:27+00:00
+
+- SubagentStop: agent_type=unknown agent_id=ac3c2a9c033265358 tool_calls=? decision=no-decision
