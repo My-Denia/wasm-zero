@@ -20,3 +20,7 @@
 ## 2026-07-17T16:47:01+00:00
 
 - M3 done: core 90 files FAIL=0 (PASS 27437); remaining 24066 FAIL all SIMD; commit 4fd3f20
+
+## 2026-07-17T16:50:58+00:00
+
+- M4 done: FAIL=0 PASS=52915 UNSUPPORTED=1091 == frozen constants; lints green; commits 2931f12+d71cfd7

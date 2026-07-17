@@ -215,26 +215,29 @@ fn cmd_register(ctx: &mut Ctx, cmd: &J) -> Verdict {
 fn perform_action(ctx: &mut Ctx, cmd: &J) -> Result<Vec<Value>, String> {
     let action = cmd.get("action").ok_or("missing action")?;
     let ty = str_field(action, "type")?;
-    let inst = ctx.resolve_instance(action)?;
+    // Fail-closed ordering: reject unknown action shapes before consulting
+    // any instance state, so they can never be masked by other errors.
+    if !matches!(ty, "invoke" | "get") {
+        return Err(format!("unknown action type {ty:?} (fail-closed)"));
+    }
     let field = str_field(action, "field")?;
-    match ty {
-        "invoke" => {
-            let mut args = Vec::new();
-            if let Some(arr) = action.get("args").and_then(|a| a.as_array()) {
-                for a in arr {
-                    args.push(parse_value(a)?);
-                }
-            }
-            ctx.store
-                .invoke_export(inst, field, &args)
-                .map_err(|e| invoke_err(&e))
+    let mut args = Vec::new();
+    if let Some(arr) = action.get("args").and_then(|a| a.as_array()) {
+        for a in arr {
+            args.push(parse_value(a)?);
         }
-        "get" => ctx
+    }
+    let inst = ctx.resolve_instance(action)?;
+    match ty {
+        "invoke" => ctx
+            .store
+            .invoke_export(inst, field, &args)
+            .map_err(|e| invoke_err(&e)),
+        _ => ctx
             .store
             .get_global_export(inst, field)
             .map(|v| vec![v])
             .map_err(|e| invoke_err(&e)),
-        other => Err(format!("unknown action type {other:?} (fail-closed)")),
     }
 }
 
