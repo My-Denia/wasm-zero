@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use crate::error::{InvokeError, Trap};
 use crate::module::{BlockType, Code, Instr, LoadOp, NumOp, StoreOp};
-use crate::store::{FuncInst, Store, MAX_PAGES, PAGE_SIZE};
+use crate::store::{mem_bytes, FuncInst, Store, MAX_PAGES, PAGE_SIZE, TABLE_IMPL_LIMIT};
 use crate::values::Value;
 
 const MAX_CALL_DEPTH: usize = 2000;
@@ -485,7 +485,9 @@ impl<'s> Machine<'s> {
                 let old = tbl.elems.len() as u64;
                 let new = old + u64::from(n);
                 let max = tbl.ty.limits.max.map_or(u64::from(u32::MAX), u64::from);
-                if new > max || new > (1 << 27) {
+                // Growth beyond the implementation limit fails with -1,
+                // which the spec explicitly permits for table.grow.
+                if new > max || new > TABLE_IMPL_LIMIT {
                     self.push_i32(u32::MAX);
                 } else {
                     tbl.elems.resize(new as usize, v);
@@ -585,11 +587,12 @@ impl<'s> Machine<'s> {
                 let old = (mem.data.len() / PAGE_SIZE) as u32;
                 let new = u64::from(old) + u64::from(n);
                 let max = u64::from(mem.ty.limits.max.unwrap_or(MAX_PAGES).min(MAX_PAGES));
-                if new > max {
-                    self.push_i32(u32::MAX);
-                } else {
-                    mem.data.resize(new as usize * PAGE_SIZE, 0);
-                    self.push_i32(old);
+                match mem_bytes(new as u32) {
+                    Some(bytes) if new <= max => {
+                        mem.data.resize(bytes, 0);
+                        self.push_i32(old);
+                    }
+                    _ => self.push_i32(u32::MAX),
                 }
             }
             Instr::MemoryInit { data } => {

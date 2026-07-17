@@ -97,6 +97,14 @@ pub struct Store {
 
 pub const PAGE_SIZE: usize = 65536;
 pub const MAX_PAGES: u32 = 65536;
+/// Implementation limit on table element counts (the spec permits
+/// allocation failure); keeps a 2^32-min table from OOMing the host.
+pub const TABLE_IMPL_LIMIT: u64 = 1 << 27;
+
+/// Byte size of `pages` memory pages, overflow-safe on 32-bit hosts.
+pub(crate) fn mem_bytes(pages: u32) -> Option<usize> {
+    usize::try_from(u64::from(pages) * PAGE_SIZE as u64).ok()
+}
 
 impl Store {
     pub fn new() -> Store {
@@ -128,9 +136,10 @@ impl Store {
         }
         for (name, ty) in desc.mems {
             let addr = self.mems.len();
+            let bytes = mem_bytes(ty.limits.min).expect("host memory size");
             self.mems.push(MemInst {
                 ty,
-                data: vec![0; ty.limits.min as usize * PAGE_SIZE],
+                data: vec![0; bytes],
             });
             inst.exports.push((name, ExternVal::Mem(addr)));
             inst.mem_addrs.push(addr);
@@ -221,6 +230,11 @@ impl Store {
         // 4. Tables and memories.
         for t in &module.tables {
             let addr = self.tables.len();
+            if u64::from(t.limits.min) > TABLE_IMPL_LIMIT {
+                return Err(InstError::Link(
+                    "table size exceeds implementation limit".into(),
+                ));
+            }
             self.tables.push(TableInst {
                 ty: *t,
                 elems: vec![Value::null_of(t.elem); t.limits.min as usize],
@@ -229,9 +243,14 @@ impl Store {
         }
         for mt in &module.mems {
             let addr = self.mems.len();
+            let Some(bytes) = mem_bytes(mt.limits.min) else {
+                return Err(InstError::Link(
+                    "memory size exceeds addressable range".into(),
+                ));
+            };
             self.mems.push(MemInst {
                 ty: *mt,
-                data: vec![0; mt.limits.min as usize * PAGE_SIZE],
+                data: vec![0; bytes],
             });
             inst.mem_addrs.push(addr);
         }

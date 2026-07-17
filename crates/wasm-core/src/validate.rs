@@ -460,7 +460,6 @@ fn check_body(ctx: &Ctx, ty: &FuncType, code: &Code) -> R<()> {
 }
 
 fn step(c: &mut Checker, instr: &Instr) -> R<()> {
-    use NumOp as N;
     use ValType::*;
     match instr {
         Instr::Unreachable => c.unreachable(),
@@ -848,7 +847,6 @@ fn step(c: &mut Checker, instr: &Instr) -> R<()> {
             }
         }
     }
-    let _ = N::I32Add; // keep the alias referenced
     Ok(())
 }
 

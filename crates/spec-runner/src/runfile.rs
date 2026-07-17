@@ -194,7 +194,13 @@ fn cmd_module(ctx: &mut Ctx, cmd: &J) -> Verdict {
             }
             Verdict::Pass
         }
-        Err(o) => Verdict::Fail(format!("module failed: {}", o.describe())),
+        Err(o) => {
+            // Judging invariant: a failed module must invalidate the
+            // current instance so later actions cannot silently hit the
+            // previous module and produce cascading false verdicts.
+            ctx.current = None;
+            Verdict::Fail(format!("module failed: {}", o.describe()))
+        }
     }
 }
 

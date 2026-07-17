@@ -317,7 +317,6 @@ impl<'a> Decoder<'a> {
                     // Custom section: name must be well-formed; content is
                     // opaque but must stay within the declared size.
                     let sec_end = end;
-                    let name_start = self.pos;
                     let len = self.u32()? as usize;
                     if self.pos + len > sec_end {
                         return self.err("unexpected end");
@@ -326,7 +325,6 @@ impl<'a> Decoder<'a> {
                     if std::str::from_utf8(bytes).is_err() {
                         return self.err("malformed UTF-8 encoding");
                     }
-                    let _ = name_start;
                     self.pos = sec_end;
                 }
                 1 => {
@@ -565,11 +563,16 @@ impl<'a> Decoder<'a> {
         let nlocals = self.u32()?;
         let mut locals = Vec::new();
         let mut total: u64 = 0;
+        // Implementation limit (spec appendix allows them): a single code
+        // entry may not declare an absurd number of locals. This also keeps
+        // a ~5-byte LEB from amplifying into a multi-GB allocation, since
+        // the group is materialized only after the running total is checked.
+        const MAX_LOCALS: u64 = 1_000_000;
         for _ in 0..nlocals {
             let count = self.u32()?;
             let ty = self.valtype()?;
             total += u64::from(count);
-            if total > u64::from(u32::MAX) {
+            if total > MAX_LOCALS {
                 return self.err("too many locals");
             }
             for _ in 0..count {

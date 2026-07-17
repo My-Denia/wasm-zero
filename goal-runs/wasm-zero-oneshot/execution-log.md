@@ -24,3 +24,23 @@
 ## 2026-07-17T16:50:58+00:00
 
 - M4 done: FAIL=0 PASS=52915 UNSUPPORTED=1091 == frozen constants; lints green; commits 2931f12+d71cfd7
+
+## 2026-07-17T17:05:52+00:00
+
+- SubagentStop: agent_type=unknown agent_id=ab15b9ec32e025ac3 tool_calls=? decision=no-decision
+
+## 2026-07-17T17:10:10+00:00
+
+- SubagentStop: agent_type=execution-auditor agent_id=a5d08d9b53e2debbe tool_calls=? decision=pass
+
+## 2026-07-17T17:10:45+00:00
+
+- M5 done: negctl A=328/B=2146/C=4-4 all red-then-green; ledger+enum double-entry ok; commit f80710b. M6 local done: README/LICENSE/CI/lock; commit 0ac0d4d. Execution audit (pre-push) PASS with 3xP3. Remote blocked: gh repo create denied by permission classifier, owner decision pending
+
+## 2026-07-17T17:11:05+00:00
+
+- SubagentStop: agent_type=unknown agent_id=a75c0885eb5df431e tool_calls=? decision=no-decision
+
+## 2026-07-17T17:20:21+00:00
+
+- SubagentStop: agent_type=general-purpose agent_id=a592690acec401ea2 tool_calls=? decision=no-decision
