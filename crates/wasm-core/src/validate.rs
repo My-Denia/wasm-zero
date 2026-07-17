@@ -515,8 +515,22 @@ fn step(c: &mut Checker, instr: &Instr) -> R<()> {
                 if ts.len() != dts.len() {
                     return err("type mismatch");
                 }
-                c.pop_vals(&ts)?;
-                c.push_vals(&ts);
+                // Push back exactly what was popped: bottom values must stay
+                // bottom so heterogeneous targets meet in unreachable code.
+                let mut popped = Vec::with_capacity(ts.len());
+                for t in ts.iter().rev() {
+                    match c.pop_any()? {
+                        None => popped.push(None),
+                        Some(v) if v == *t => popped.push(Some(v)),
+                        Some(_) => return err("type mismatch"),
+                    }
+                }
+                for v in popped.into_iter().rev() {
+                    match v {
+                        Some(t) => c.push(t),
+                        None => c.push_bot(),
+                    }
+                }
             }
             c.pop_vals(&dts)?;
             c.unreachable();

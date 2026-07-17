@@ -6,7 +6,9 @@
 
 pub mod decode;
 pub mod error;
+pub mod exec;
 pub mod module;
+pub mod simd;
 pub mod store;
 pub mod types;
 pub mod validate;

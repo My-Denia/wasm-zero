@@ -1,10 +1,12 @@
-//! Store: runtime instances of modules and host modules. Execution (M3)
-//! plugs into this; in the M1 baseline, wasm instantiation is unreachable
-//! because the decoder rejects everything.
+//! Store: runtime instances of modules and host modules, instantiation
+//! per the wg-2.0 semantics (import matching, global init evaluation,
+//! in-order active segment application with partial effects, start).
+
+use std::rc::Rc;
 
 use crate::error::{InstError, InvokeError, Trap};
-use crate::module::Module;
-use crate::types::{FuncType, GlobalType, MemType, TableType};
+use crate::module::{Code, ConstExpr, DataMode, ElemMode, ExportDesc, ImportDesc, Instr, Module};
+use crate::types::{FuncType, GlobalType, Limits, MemType, RefType, TableType};
 use crate::values::Value;
 
 pub type InstanceId = usize;
@@ -32,33 +34,56 @@ pub(crate) enum FuncInst {
         ty: FuncType,
         func: HostFunc,
     },
-    #[allow(dead_code)]
     Wasm {
         ty: FuncType,
+        inst: InstanceId,
+        code: Rc<Code>,
     },
 }
 
-#[allow(dead_code)] // read by the M3 interpreter
+impl FuncInst {
+    pub(crate) fn ty(&self) -> &FuncType {
+        match self {
+            FuncInst::Host { ty, .. } => ty,
+            FuncInst::Wasm { ty, .. } => ty,
+        }
+    }
+}
+
 pub(crate) struct TableInst {
     pub ty: TableType,
     pub elems: Vec<Value>,
 }
 
-#[allow(dead_code)] // read by the M3 interpreter
 pub(crate) struct MemInst {
     pub ty: MemType,
     pub data: Vec<u8>,
 }
 
-#[allow(dead_code)] // read by the M3 interpreter
 pub(crate) struct GlobalInst {
     pub ty: GlobalType,
     pub val: Value,
 }
 
+/// Per-instance element segment contents (droppable).
+pub(crate) struct ElemInst {
+    pub elems: Vec<Value>,
+}
+
+pub(crate) struct DataInst {
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Default)]
 pub(crate) struct Instance {
     pub exports: Vec<(String, ExternVal)>,
+    pub types: Vec<FuncType>,
+    pub func_addrs: Vec<usize>,
+    pub table_addrs: Vec<usize>,
+    pub mem_addrs: Vec<usize>,
+    pub global_addrs: Vec<usize>,
+    pub elems: Vec<ElemInst>,
+    pub datas: Vec<DataInst>,
 }
 
 #[derive(Default)]
@@ -71,6 +96,7 @@ pub struct Store {
 }
 
 pub const PAGE_SIZE: usize = 65536;
+pub const MAX_PAGES: u32 = 65536;
 
 impl Store {
     pub fn new() -> Store {
@@ -83,11 +109,13 @@ impl Store {
             let addr = self.funcs.len();
             self.funcs.push(FuncInst::Host { ty, func });
             inst.exports.push((name, ExternVal::Func(addr)));
+            inst.func_addrs.push(addr);
         }
         for (name, ty, val) in desc.globals {
             let addr = self.globals.len();
             self.globals.push(GlobalInst { ty, val });
             inst.exports.push((name, ExternVal::Global(addr)));
+            inst.global_addrs.push(addr);
         }
         for (name, ty) in desc.tables {
             let addr = self.tables.len();
@@ -96,6 +124,7 @@ impl Store {
                 elems: vec![Value::FuncRef(None); ty.limits.min as usize],
             });
             inst.exports.push((name, ExternVal::Table(addr)));
+            inst.table_addrs.push(addr);
         }
         for (name, ty) in desc.mems {
             let addr = self.mems.len();
@@ -104,6 +133,7 @@ impl Store {
                 data: vec![0; ty.limits.min as usize * PAGE_SIZE],
             });
             inst.exports.push((name, ExternVal::Mem(addr)));
+            inst.mem_addrs.push(addr);
         }
         self.instances.push(inst);
         self.instances.len() - 1
@@ -111,12 +141,210 @@ impl Store {
 
     pub fn instantiate(
         &mut self,
-        _module: &Module,
-        _resolve: &mut dyn FnMut(&str, &str) -> Option<ExternVal>,
+        module: &Module,
+        resolve: &mut dyn FnMut(&str, &str) -> Option<ExternVal>,
     ) -> Result<InstanceId, InstError> {
-        Err(InstError::Link(
-            "instantiation not implemented (fail-closed baseline)".into(),
-        ))
+        let mut inst = Instance {
+            types: module.types.clone(),
+            ..Default::default()
+        };
+
+        // 1. Resolve and type-check imports.
+        for imp in &module.imports {
+            let Some(ev) = resolve(&imp.module, &imp.name) else {
+                return Err(InstError::Link(format!(
+                    "unknown import {}.{}",
+                    imp.module, imp.name
+                )));
+            };
+            match (imp.desc, ev) {
+                (ImportDesc::Func(tidx), ExternVal::Func(addr)) => {
+                    let want = &module.types[tidx as usize];
+                    if self.funcs[addr].ty() != want {
+                        return Err(InstError::Link("incompatible import type".into()));
+                    }
+                    inst.func_addrs.push(addr);
+                }
+                (ImportDesc::Table(want), ExternVal::Table(addr)) => {
+                    let have = &self.tables[addr];
+                    let have_limits = Limits {
+                        min: have.elems.len() as u32,
+                        max: have.ty.limits.max,
+                    };
+                    if have.ty.elem != want.elem || !limits_match(&have_limits, &want.limits) {
+                        return Err(InstError::Link("incompatible import type".into()));
+                    }
+                    inst.table_addrs.push(addr);
+                }
+                (ImportDesc::Mem(want), ExternVal::Mem(addr)) => {
+                    let have = &self.mems[addr];
+                    let have_limits = Limits {
+                        min: (have.data.len() / PAGE_SIZE) as u32,
+                        max: have.ty.limits.max,
+                    };
+                    if !limits_match(&have_limits, &want.limits) {
+                        return Err(InstError::Link("incompatible import type".into()));
+                    }
+                    inst.mem_addrs.push(addr);
+                }
+                (ImportDesc::Global(want), ExternVal::Global(addr)) => {
+                    if self.globals[addr].ty != want {
+                        return Err(InstError::Link("incompatible import type".into()));
+                    }
+                    inst.global_addrs.push(addr);
+                }
+                _ => return Err(InstError::Link("incompatible import type".into())),
+            }
+        }
+
+        // 2. Allocate own functions (addresses must exist before globals /
+        // element segments evaluate ref.func).
+        for (i, &tidx) in module.funcs.iter().enumerate() {
+            let addr = self.funcs.len();
+            self.funcs.push(FuncInst::Wasm {
+                ty: module.types[tidx as usize].clone(),
+                inst: self.instances.len(), // this instance's future id
+                code: Rc::new(module.codes[i].clone()),
+            });
+            inst.func_addrs.push(addr);
+        }
+
+        // 3. Globals: evaluate initializers (context: imported globals +
+        // this module's functions), then allocate.
+        for g in &module.globals {
+            let val = self.eval_const(&inst, &g.init);
+            let addr = self.globals.len();
+            self.globals.push(GlobalInst { ty: g.ty, val });
+            inst.global_addrs.push(addr);
+        }
+
+        // 4. Tables and memories.
+        for t in &module.tables {
+            let addr = self.tables.len();
+            self.tables.push(TableInst {
+                ty: *t,
+                elems: vec![Value::null_of(t.elem); t.limits.min as usize],
+            });
+            inst.table_addrs.push(addr);
+        }
+        for mt in &module.mems {
+            let addr = self.mems.len();
+            self.mems.push(MemInst {
+                ty: *mt,
+                data: vec![0; mt.limits.min as usize * PAGE_SIZE],
+            });
+            inst.mem_addrs.push(addr);
+        }
+
+        // 5. Element/data segment instances.
+        for e in &module.elems {
+            let elems = e
+                .init
+                .iter()
+                .map(|expr| self.eval_const(&inst, expr))
+                .collect();
+            inst.elems.push(ElemInst { elems });
+        }
+        for d in &module.datas {
+            inst.datas.push(DataInst {
+                bytes: d.bytes.clone(),
+            });
+        }
+
+        // 6. Exports.
+        for ex in &module.exports {
+            let ev = match ex.desc {
+                ExportDesc::Func(i) => ExternVal::Func(inst.func_addrs[i as usize]),
+                ExportDesc::Table(i) => ExternVal::Table(inst.table_addrs[i as usize]),
+                ExportDesc::Mem(i) => ExternVal::Mem(inst.mem_addrs[i as usize]),
+                ExportDesc::Global(i) => ExternVal::Global(inst.global_addrs[i as usize]),
+            };
+            inst.exports.push((ex.name.clone(), ev));
+        }
+
+        let id = self.instances.len();
+        self.instances.push(inst);
+
+        // 7. Apply active element segments in order (partial effects on
+        // earlier segments persist on trap).
+        for (i, e) in module.elems.iter().enumerate() {
+            match &e.mode {
+                ElemMode::Active { table, offset } => {
+                    let inst_ref = &self.instances[id];
+                    let taddr = inst_ref.table_addrs[*table as usize];
+                    let off = match self.eval_const(&self.instances[id], offset) {
+                        Value::I32(v) => v,
+                        _ => unreachable!("validated offset type"),
+                    };
+                    let seg: Vec<Value> = self.instances[id].elems[i].elems.clone();
+                    let table = &mut self.tables[taddr];
+                    let end = u64::from(off) + seg.len() as u64;
+                    if end > table.elems.len() as u64 {
+                        return Err(InstError::Trap(Trap::new("out of bounds table access")));
+                    }
+                    table.elems[off as usize..off as usize + seg.len()].copy_from_slice(&seg);
+                    self.instances[id].elems[i].elems.clear();
+                }
+                ElemMode::Declarative => {
+                    self.instances[id].elems[i].elems.clear();
+                }
+                ElemMode::Passive => {}
+            }
+        }
+
+        // 8. Apply active data segments in order.
+        for (i, d) in module.datas.iter().enumerate() {
+            if let DataMode::Active { mem, offset } = &d.mode {
+                let inst_ref = &self.instances[id];
+                let maddr = inst_ref.mem_addrs[*mem as usize];
+                let off = match self.eval_const(&self.instances[id], offset) {
+                    Value::I32(v) => v,
+                    _ => unreachable!("validated offset type"),
+                };
+                let mem = &mut self.mems[maddr];
+                let end = u64::from(off) + d.bytes.len() as u64;
+                if end > mem.data.len() as u64 {
+                    return Err(InstError::Trap(Trap::new("out of bounds memory access")));
+                }
+                mem.data[off as usize..off as usize + d.bytes.len()].copy_from_slice(&d.bytes);
+                self.instances[id].datas[i].bytes.clear();
+            }
+        }
+
+        // 9. Start function.
+        if let Some(s) = module.start {
+            let addr = self.instances[id].func_addrs[s as usize];
+            crate::exec::invoke(self, addr, &[]).map_err(|e| match e {
+                InvokeError::Trap(t) => InstError::Trap(t),
+                other => InstError::Link(other.to_string()),
+            })?;
+        }
+
+        Ok(id)
+    }
+
+    /// Evaluate a validated constant expression.
+    pub(crate) fn eval_const(&self, inst: &Instance, e: &ConstExpr) -> Value {
+        let mut stack: Vec<Value> = Vec::new();
+        for i in &e.instrs {
+            match i {
+                Instr::I32Const(v) => stack.push(Value::I32(*v)),
+                Instr::I64Const(v) => stack.push(Value::I64(*v)),
+                Instr::F32Const(v) => stack.push(Value::F32(*v)),
+                Instr::F64Const(v) => stack.push(Value::F64(*v)),
+                Instr::V128Const(v) => stack.push(Value::V128(*v)),
+                Instr::RefNull(t) => stack.push(Value::null_of(*t)),
+                Instr::RefFunc { func } => {
+                    stack.push(Value::FuncRef(Some(inst.func_addrs[*func as usize] as u32)))
+                }
+                Instr::GlobalGet { idx } => {
+                    stack.push(self.globals[inst.global_addrs[*idx as usize]].val)
+                }
+                Instr::End => {}
+                _ => unreachable!("validated const expr"),
+            }
+        }
+        stack.pop().expect("const expr yields one value")
     }
 
     pub fn exports(&self, inst: InstanceId) -> impl Iterator<Item = (&String, &ExternVal)> {
@@ -145,24 +373,24 @@ impl Store {
                 "export {field} is not a function"
             )));
         };
-        self.invoke_func(addr, args)
-    }
-
-    pub(crate) fn invoke_func(
-        &mut self,
-        addr: usize,
-        args: &[Value],
-    ) -> Result<Vec<Value>, InvokeError> {
-        match &self.funcs[addr] {
-            FuncInst::Host { ty, func } => {
-                check_args(ty, args)?;
-                let f = *func;
-                f(args).map_err(InvokeError::Trap)
-            }
-            FuncInst::Wasm { .. } => Err(InvokeError::Trap(Trap::new(
-                "wasm execution not implemented (fail-closed baseline)",
-            ))),
+        let ty = self.funcs[addr].ty();
+        if args.len() != ty.params.len() {
+            return Err(InvokeError::ArgMismatch(format!(
+                "expected {} args, got {}",
+                ty.params.len(),
+                args.len()
+            )));
         }
+        for (a, p) in args.iter().zip(&ty.params) {
+            if a.ty() != *p {
+                return Err(InvokeError::ArgMismatch(format!(
+                    "arg type {:?} != param type {:?}",
+                    a.ty(),
+                    p
+                )));
+            }
+        }
+        crate::exec::invoke(self, addr, args)
     }
 
     pub fn get_global_export(&self, inst: InstanceId, field: &str) -> Result<Value, InvokeError> {
@@ -178,22 +406,26 @@ impl Store {
     }
 }
 
-fn check_args(ty: &FuncType, args: &[Value]) -> Result<(), InvokeError> {
-    if args.len() != ty.params.len() {
-        return Err(InvokeError::ArgMismatch(format!(
-            "expected {} args, got {}",
-            ty.params.len(),
-            args.len()
-        )));
+/// Import limits matching: candidate {n1,m1} matches required {n2,m2}
+/// iff n1 >= n2 and (m2 = none or m1 <= m2).
+fn limits_match(have: &Limits, want: &Limits) -> bool {
+    if have.min < want.min {
+        return false;
     }
-    for (a, p) in args.iter().zip(&ty.params) {
-        if a.ty() != *p {
-            return Err(InvokeError::ArgMismatch(format!(
-                "arg type {:?} != param type {:?}",
-                a.ty(),
-                p
-            )));
+    match want.max {
+        None => true,
+        Some(wm) => match have.max {
+            Some(hm) => hm <= wm,
+            None => false,
+        },
+    }
+}
+
+impl Value {
+    pub fn null_of(t: RefType) -> Value {
+        match t {
+            RefType::FuncRef => Value::FuncRef(None),
+            RefType::ExternRef => Value::ExternRef(None),
         }
     }
-    Ok(())
 }

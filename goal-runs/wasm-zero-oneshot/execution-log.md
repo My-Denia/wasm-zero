@@ -12,3 +12,7 @@
 ## 2026-07-17T16:24:56+00:00
 
 - M1 done: baseline sweep total=54006 PASS=719 FAIL=52196 UNSUPPORTED=1091 accounting=ok exit=1; fmt+clippy clean; commit 5dc797b
+
+## 2026-07-17T16:38:28+00:00
+
+- M2 done: malformed(binary)+invalid FAIL=0; unit tests 5 pass; commit d3a7181
