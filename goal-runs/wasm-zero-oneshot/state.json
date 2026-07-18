@@ -1,0 +1,93 @@
+{
+  "schema_version": 6,
+  "runner": "claude-gah",
+  "slug": "wasm-zero-oneshot",
+  "goal": "\u4ece\u96f6\u5b9e\u73b0 WebAssembly \u89e3\u91ca\u5668\uff1a\u5b98\u65b9 test/core (wg-2.0) \u5168\u91cf\u4e3a\u9a8c\u6536\u8bed\u6599\u3001\u5b98\u65b9\u53c2\u7167\u89e3\u91ca\u5668\u4e3a\u5916\u90e8 oracle\uff0cfail-closed \u6838\u7b97 FAIL=0",
+  "scope": "C:/Files/wasm-zero \u5168\u90e8\uff1bMy-Denia \u540d\u4e0b\u672c\u6b21\u65b0\u5efa\u8fdc\u7aef\u4ed3\u5e93",
+  "size": "standard",
+  "risk_level": "high",
+  "delegation_mode": "strict-audit",
+  "status": "executing",
+  "status_note": "",
+  "audit_mode": "independent-subagents",
+  "plan_gate": "pass",
+  "execution_gate": "pending",
+  "wait_policy": "required-auditors-blocking",
+  "native_goal": {
+    "active": false,
+    "reason": ""
+  },
+  "created_at_utc": "2026-07-17T16:06:13+00:00",
+  "updated_at_utc": "2026-07-17T21:41:37+00:00",
+  "acceptance_criteria": [],
+  "non_goals": [
+    "\u7981\u8bfb wasm-oracle \u4ed3\u5e93(\u672c\u5730+\u8fdc\u7aef)\uff1b\u7981\u8bfb C:/Files/ablation-2arm\uff1b\u4e0d\u6539 C:/Files/wasm\uff1bWasm 3.0 \u7279\u6027(GC/EH/memory64\u7b49)\u4e0d\u5728\u672c\u6b21\u9a8c\u6536\u5185\uff1b\u4e0d\u5f15\u5165\u4ed8\u8d39\u670d\u52a1\uff1bunsigned \u63d0\u4ea4"
+  ],
+  "required_subagents": [
+    {
+      "name": "plan-auditor",
+      "role": "plan-audit",
+      "required": true,
+      "model": "inherit",
+      "status": "pass",
+      "decision": "pass",
+      "completed_at_utc": "2026-07-17T16:17:56+00:00",
+      "artifact_ref": "rereview-2026-07-17",
+      "summary": ""
+    },
+    {
+      "name": "execution-auditor",
+      "role": "execution-audit",
+      "required": true,
+      "model": "inherit",
+      "status": "pass",
+      "decision": "pass",
+      "completed_at_utc": "2026-07-17T17:10:45+00:00",
+      "artifact_ref": "pre-push-audit-2026-07-17",
+      "summary": ""
+    }
+  ],
+  "optional_subagents": [],
+  "subagent_results": [
+    {
+      "name": "plan-auditor",
+      "role": "plan-audit",
+      "required": true,
+      "model": "inherit",
+      "status": "pass",
+      "decision": "pass",
+      "completed_at_utc": "2026-07-17T16:17:56+00:00",
+      "artifact_ref": "rereview-2026-07-17",
+      "summary": ""
+    },
+    {
+      "name": "execution-auditor",
+      "role": "execution-audit",
+      "required": true,
+      "model": "inherit",
+      "status": "pass",
+      "decision": "pass",
+      "completed_at_utc": "2026-07-17T17:10:45+00:00",
+      "artifact_ref": "pre-push-audit-2026-07-17",
+      "summary": ""
+    },
+    {
+      "name": "internal-reviewer-1",
+      "role": "code-review",
+      "required": false,
+      "model": "inherit",
+      "status": "needs-fix",
+      "decision": "needs-fix",
+      "completed_at_utc": "2026-07-17T21:41:37+00:00",
+      "artifact_ref": "review-1: 1xP2+4xP3, all fixed in 4c7996d",
+      "summary": ""
+    }
+  ],
+  "checkpoints": [
+    {
+      "time_utc": "2026-07-17T16:06:13+00:00",
+      "status": "planning",
+      "summary": "Run initialized."
+    }
+  ]
+}

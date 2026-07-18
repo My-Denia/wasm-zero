@@ -1,0 +1,7 @@
+FILE synthetic.json                           pass=    0 fail=   4 unsupported=   0
+  FAIL synthetic.json:1 [assert_frobnicate] unknown command type "assert_frobnicate" (fail-closed)
+  FAIL synthetic.json:2 [assert_return] action failed: unknown action type "teleport" (fail-closed)
+  FAIL synthetic.json:3 [assert_return] action failed: unknown value type "quaternion" (fail-closed)
+  FAIL synthetic.json:4 [assert_malformed] unknown module_type Some("hologram") (fail-closed)
+TOTAL files=1 commands=4 PASS=0 FAIL=4 UNSUPPORTED=0 accounting=ok
+RUNNER_EXIT=1
