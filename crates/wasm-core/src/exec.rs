@@ -464,8 +464,14 @@ impl<'s> Machine<'s> {
                     return Err(trap("out of bounds table access"));
                 }
                 let (s, n, d) = (s as usize, n as usize, d as usize);
-                let src: Vec<Value> = seg[s..s + n].to_vec();
-                self.store.tables[ta].elems[d..d + n].copy_from_slice(&src);
+                // Source (element segment) and destination (table) are
+                // disjoint store fields: copy slice-to-slice with no
+                // full-range temporary.
+                let Store {
+                    instances, tables, ..
+                } = &mut *self.store;
+                let src = &instances[inst].elems[*elem as usize].elems[s..s + n];
+                tables[ta].elems[d..d + n].copy_from_slice(src);
             }
             Instr::ElemDrop { elem } => {
                 let inst = self.frame().inst;
@@ -489,8 +495,16 @@ impl<'s> Machine<'s> {
                 if sa == da {
                     self.store.tables[sa].elems.copy_within(s..s + n, d);
                 } else {
-                    let chunk: Vec<Value> = self.store.tables[sa].elems[s..s + n].to_vec();
-                    self.store.tables[da].elems[d..d + n].copy_from_slice(&chunk);
+                    // Disjoint tables: split the store's table vector at the
+                    // higher index so source and destination borrow at once,
+                    // with no full-range temporary.
+                    let hi = sa.max(da);
+                    let (left, right) = self.store.tables.split_at_mut(hi);
+                    if sa < da {
+                        right[0].elems[d..d + n].copy_from_slice(&left[sa].elems[s..s + n]);
+                    } else {
+                        left[da].elems[d..d + n].copy_from_slice(&right[0].elems[s..s + n]);
+                    }
                 }
             }
             Instr::TableGrow { table } => {
@@ -635,8 +649,13 @@ impl<'s> Machine<'s> {
                     return Err(trap("out of bounds memory access"));
                 }
                 let (s, n, d) = (s as usize, n as usize, d as usize);
-                let chunk: Vec<u8> = seg[s..s + n].to_vec();
-                self.store.mems[a].data[d..d + n].copy_from_slice(&chunk);
+                // Data segment and memory are disjoint store fields: copy
+                // slice-to-slice with no full-range temporary.
+                let Store {
+                    instances, mems, ..
+                } = &mut *self.store;
+                let src = &instances[inst].datas[*data as usize].bytes[s..s + n];
+                mems[a].data[d..d + n].copy_from_slice(src);
             }
             Instr::DataDrop { data } => {
                 let inst = self.frame().inst;

@@ -318,8 +318,13 @@ impl<'a> Decoder<'a> {
                     // opaque but must stay within the declared size.
                     let sec_end = end;
                     let len = self.u32()? as usize;
-                    if self.pos + len > sec_end {
-                        return self.err("unexpected end");
+                    // Overflow-safe: reading the name length may itself have
+                    // crossed sec_end (checked_sub -> None), and otherwise the
+                    // name must fit in the remaining bytes. Forming pos+len
+                    // directly could wrap on 32-bit builds.
+                    match sec_end.checked_sub(self.pos) {
+                        Some(remaining) if len <= remaining => {}
+                        _ => return self.err("unexpected end"),
                     }
                     let bytes = self.take(len)?;
                     if std::str::from_utf8(bytes).is_err() {
@@ -1291,6 +1296,16 @@ mod tests {
     #[test]
     fn truncated_section() {
         let m = b"\0asm\x01\0\0\0\x01\x7f";
+        assert!(dec(m).is_err());
+    }
+
+    #[test]
+    fn zero_size_custom_section_needs_name_length() {
+        // A size-0 custom section has no room for the name-length byte;
+        // reading it must not underflow the remaining-bytes computation.
+        // (Regression: the review-round-4 overflow-safe rewrite briefly
+        // accepted this by underflowing sec_end - pos.)
+        let m = b"\0asm\x01\0\0\0\x00\x00\x00\x05\x01\x00\x07\x00\x00";
         assert!(dec(m).is_err());
     }
 }

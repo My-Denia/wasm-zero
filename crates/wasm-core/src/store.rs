@@ -112,6 +112,28 @@ impl Store {
     }
 
     pub fn add_host_module(&mut self, desc: HostModule) -> Result<InstanceId, String> {
+        // Atomic: any failure below rolls back every store entry allocated
+        // for this descriptor, so partial host modules never leak or leave
+        // resolvable orphan addresses.
+        let (fb, gb, tb, mb) = (
+            self.funcs.len(),
+            self.globals.len(),
+            self.tables.len(),
+            self.mems.len(),
+        );
+        match self.add_host_module_inner(desc) {
+            Ok(id) => Ok(id),
+            Err(e) => {
+                self.funcs.truncate(fb);
+                self.globals.truncate(gb);
+                self.tables.truncate(tb);
+                self.mems.truncate(mb);
+                Err(e)
+            }
+        }
+    }
+
+    fn add_host_module_inner(&mut self, desc: HostModule) -> Result<InstanceId, String> {
         let mut inst = Instance::default();
         for (name, ty, func) in desc.funcs {
             let addr = self.funcs.len();
@@ -143,6 +165,9 @@ impl Store {
         }
         for (name, ty) in desc.tables {
             let addr = self.tables.len();
+            if !limits_ok(&ty.limits, u32::MAX) {
+                return Err(format!("host table {name}: invalid limits"));
+            }
             if u64::from(ty.limits.min) > TABLE_IMPL_LIMIT {
                 return Err(format!("host table {name}: exceeds implementation limit"));
             }
@@ -157,6 +182,9 @@ impl Store {
         }
         for (name, ty) in desc.mems {
             let addr = self.mems.len();
+            if !limits_ok(&ty.limits, MAX_PAGES) {
+                return Err(format!("host memory {name}: invalid limits"));
+            }
             let bytes = mem_bytes(ty.limits.min).ok_or("host memory size overflow")?;
             let mut data = Vec::new();
             if data.try_reserve_exact(bytes).is_err() {
@@ -467,6 +495,15 @@ impl Store {
                     p
                 )));
             }
+            // Embedder-supplied funcref arguments are untrusted: a forged
+            // address would panic call_indirect after being stored.
+            if let Value::FuncRef(Some(fa)) = a {
+                if *fa as usize >= self.funcs.len() {
+                    return Err(InvokeError::ArgMismatch(
+                        "invalid function reference argument".into(),
+                    ));
+                }
+            }
         }
         crate::exec::invoke(self, addr, args)
     }
@@ -481,6 +518,17 @@ impl Store {
             )));
         };
         Ok(self.globals[addr].val)
+    }
+}
+
+/// Well-formed limits: min <= max (when present) and both within `ceiling`.
+fn limits_ok(l: &Limits, ceiling: u32) -> bool {
+    if l.min > ceiling {
+        return false;
+    }
+    match l.max {
+        None => true,
+        Some(m) => m <= ceiling && l.min <= m,
     }
 }
 

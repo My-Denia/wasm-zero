@@ -88,3 +88,7 @@
 ## 2026-07-17T23:46:55+00:00
 
 - SubagentStop: agent_type=unknown agent_id=ac9e93f612cea1f25 tool_calls=? decision=no-decision
+
+## 2026-07-18T00:03:50+00:00
+
+- Stop-hook ack #4: review round 3 fixed (d3f8d67, 5 findings); round-4 rereview + CI in flight; final audit + merge pending clean rereview
