@@ -3,7 +3,7 @@
 <!-- gah:auto -->
 Status: completed | Risk: high | Audit: independent-subagents
 Gates: plan=pass execution=pass
-Latest checkpoint: merged + reproduced from fresh checkout.
+Latest checkpoint: run closed
 <!-- /gah:auto -->
 
 ## 最终状态
