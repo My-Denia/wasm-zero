@@ -382,13 +382,19 @@ impl Store {
                         Value::I32(v) => v,
                         _ => unreachable!("validated offset type"),
                     };
-                    let seg: Vec<Value> = self.instances[id].elems[i].elems.clone();
-                    let table = &mut self.tables[taddr];
-                    let end = u64::from(off) + seg.len() as u64;
-                    if end > table.elems.len() as u64 {
+                    // Bounds-check against the segment length first, then copy
+                    // slice-to-slice across disjoint store fields — no clone,
+                    // so a large or out-of-bounds initializer cannot OOM.
+                    let seg_len = self.instances[id].elems[i].elems.len();
+                    let end = u64::from(off) + seg_len as u64;
+                    if end > self.tables[taddr].elems.len() as u64 {
                         return Err(InstError::Trap(Trap::new("out of bounds table access")));
                     }
-                    table.elems[off as usize..off as usize + seg.len()].copy_from_slice(&seg);
+                    let Store {
+                        instances, tables, ..
+                    } = self;
+                    let src = &instances[id].elems[i].elems[..seg_len];
+                    tables[taddr].elems[off as usize..off as usize + seg_len].copy_from_slice(src);
                     self.instances[id].elems[i].elems.clear();
                 }
                 ElemMode::Declarative => {

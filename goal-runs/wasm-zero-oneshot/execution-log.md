@@ -92,3 +92,7 @@
 ## 2026-07-18T00:03:50+00:00
 
 - Stop-hook ack #4: review round 3 fixed (d3f8d67, 5 findings); round-4 rereview + CI in flight; final audit + merge pending clean rereview
+
+## 2026-07-18T00:20:32+00:00
+
+- Stop-hook ack #5: round-4 review fixed (44df91d, 5 findings + regression test); round-5 rereview + CI in flight; execution_gate correctly pending until final audit before merge
