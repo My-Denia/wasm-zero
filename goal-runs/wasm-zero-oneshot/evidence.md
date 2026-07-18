@@ -37,15 +37,24 @@
 ## AC5 — CI
 
 - 首次 CI 抓出真实跨平台缺陷：Linux glibc 路径 ceil/floor/trunc/nearest 对 SNaN 不置 quiet 位 → 32 条 nan:arithmetic FAIL；修复（显式 quiet + 回归单测）后双平台 FAIL=0
-- 绿色 run：https://github.com/My-Denia/wasm-zero/actions/runs/29620342062（NaN 修复后）与 https://github.com/My-Denia/wasm-zero/actions/runs/29620854353（Codex 评审修复后）——含全量 sweep 硬门禁 + 独立枚举核对
+- 最终 HEAD（9a0622f）绿色 run：https://github.com/My-Denia/wasm-zero/actions/runs/29623532773（全量 sweep 硬门禁 + 独立枚举核对）；此前每轮 review 修复后 CI 均绿（29620342062 / 29620854353 / 29621496838 / 29622204333 / 29622836515）
 - 前两次 CI 失败（脚本执行位 rc=126、NaN 分歧）及修复过程记录于 execution-log
 
 ## AC6 — 工程化交付
 
 - fresh-checkout 复现（合并前预演，远端分支克隆到独立目录）：`git clone → scripts/fetch_spec.sh → scripts/fetch_wabt.sh → scripts/convert_corpus.sh → cargo run --release -p spec-runner -- --expect-total 54006 --expect-unsupported 1091` → SWEEP_EXIT=0；`enum_corpus.py` → ENUM_EXIT=0
-- 合并后将对 main 重复一次作为最终 AC6 证据
+- 合并后对 main（merge SHA 3d06be16）重复：见本文件末尾 "AC6 final" 记录
 
 ## AC7 — 审计闭环
 
 - plan audit：independent plan-auditor，2 轮（needs-replan→pass），6 findings 全闭合（见 execution-log）
-- execution audit：M7 记录
+- execution audit #1（pre-push）：pass（重跑 sweep/枚举/lint、抽查 ledger 12 行对 wast 源、脱敏扫描）
+- 内部代码评审 #1：1×P2 + 4×P3，全修复（commit 4c7996d 时代）
+- 外部评审（Codex GitHub bot，跨家族）：6 轮，findings 8→10→5→5→1→0，共 29 条全部修复/回复/resolve；第 6 轮 clean（"Didn't find any major issues", reviewed 9a0622f）
+- execution audit #2（pre-merge final）：pass（8/8 项亲自验证；修复真实性抽查 3/3 属实）
+- 合并：PR #1 merge SHA 3d06be164522a7cd1716b21dd5709add02fe1751，2026-07-18T00:53:39Z，普通 merge（无 admin override、无 force push）
+
+## AC6 final — 合并后 fresh-checkout 复现（2026-07-18）
+
+- `git clone https://github.com/My-Denia/wasm-zero.git`（HEAD = merge SHA 3d06be16）→ fetch_spec / fetch_wabt / convert_corpus → sweep → enum
+- 结果：`TOTAL files=148 commands=54006 PASS=52915 FAIL=0 UNSUPPORTED=1091 accounting=ok`，SWEEP_EXIT=0，ENUM_EXIT=0，全管线耗时 25s

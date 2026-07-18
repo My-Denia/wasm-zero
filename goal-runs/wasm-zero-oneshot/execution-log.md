@@ -96,3 +96,19 @@
 ## 2026-07-18T00:20:32+00:00
 
 - Stop-hook ack #5: round-4 review fixed (44df91d, 5 findings + regression test); round-5 rereview + CI in flight; execution_gate correctly pending until final audit before merge
+
+## 2026-07-18T00:38:59+00:00
+
+- Stop-hook ack #6: round-5 fixed (9a0622f); round-6 rereview + CI in flight; gate pending until final pre-merge audit
+
+## 2026-07-18T00:39:07+00:00
+
+- SubagentStop: agent_type=unknown agent_id=a460cf5b7924df2ab tool_calls=? decision=no-decision
+
+## 2026-07-18T00:53:34+00:00
+
+- Final pre-merge audit PASS (8/8). Merge conditions all met: CI green on HEAD 9a0622f, codex clean rereview, 29/29 threads resolved+replied. Proceeding to merge per pre-authorization
+
+## 2026-07-18T00:56:07+00:00
+
+- Merged (3d06be16) + main synced + fresh-checkout on main SWEEP_EXIT=0 ENUM_EXIT=0 in 25s; closeout records finalized
