@@ -122,13 +122,19 @@ impl Store {
         for (name, ty, val) in desc.globals {
             // Host-supplied values are untrusted with respect to engine
             // invariants: a declared/actual type mismatch would later
-            // panic typed stack helpers inside validated code.
+            // panic typed stack helpers inside validated code, and a
+            // forged function reference would panic call_indirect.
             if val.ty() != ty.val {
                 return Err(format!(
                     "host global {name}: value type {:?} != declared {:?}",
                     val.ty(),
                     ty.val
                 ));
+            }
+            if let Value::FuncRef(Some(a)) = val {
+                if a as usize >= self.funcs.len() {
+                    return Err(format!("host global {name}: invalid function reference"));
+                }
             }
             let addr = self.globals.len();
             self.globals.push(GlobalInst { ty, val });
@@ -137,20 +143,27 @@ impl Store {
         }
         for (name, ty) in desc.tables {
             let addr = self.tables.len();
-            self.tables.push(TableInst {
-                ty,
-                elems: vec![Value::null_of(ty.elem); ty.limits.min as usize],
-            });
+            if u64::from(ty.limits.min) > TABLE_IMPL_LIMIT {
+                return Err(format!("host table {name}: exceeds implementation limit"));
+            }
+            let mut elems = Vec::new();
+            if elems.try_reserve_exact(ty.limits.min as usize).is_err() {
+                return Err(format!("host table {name}: cannot allocate"));
+            }
+            elems.resize(ty.limits.min as usize, Value::null_of(ty.elem));
+            self.tables.push(TableInst { ty, elems });
             inst.exports.push((name, ExternVal::Table(addr)));
             inst.table_addrs.push(addr);
         }
         for (name, ty) in desc.mems {
             let addr = self.mems.len();
             let bytes = mem_bytes(ty.limits.min).ok_or("host memory size overflow")?;
-            self.mems.push(MemInst {
-                ty,
-                data: vec![0; bytes],
-            });
+            let mut data = Vec::new();
+            if data.try_reserve_exact(bytes).is_err() {
+                return Err(format!("host memory {name}: cannot allocate"));
+            }
+            data.resize(bytes, 0);
+            self.mems.push(MemInst { ty, data });
             inst.exports.push((name, ExternVal::Mem(addr)));
             inst.mem_addrs.push(addr);
         }
@@ -229,6 +242,23 @@ impl Store {
             }
         }
 
+        // Allocation failures below must not leave orphan store entries
+        // behind: before the instance is published nothing can legally
+        // reference them, so they are rolled back wholesale. (Failures
+        // *after* publication — segment application, start — deliberately
+        // keep their effects, as the spec requires.)
+        let funcs_base = self.funcs.len();
+        let globals_base = self.globals.len();
+        let tables_base = self.tables.len();
+        let mems_base = self.mems.len();
+        let rollback = |store: &mut Store, e: InstError| {
+            store.funcs.truncate(funcs_base);
+            store.globals.truncate(globals_base);
+            store.tables.truncate(tables_base);
+            store.mems.truncate(mems_base);
+            Err(e)
+        };
+
         // 2. Allocate own functions (addresses must exist before globals /
         // element segments evaluate ref.func).
         for (i, &tidx) in module.funcs.iter().enumerate() {
@@ -254,13 +284,14 @@ impl Store {
         for t in &module.tables {
             let addr = self.tables.len();
             if u64::from(t.limits.min) > TABLE_IMPL_LIMIT {
-                return Err(InstError::Link(
-                    "table size exceeds implementation limit".into(),
-                ));
+                return rollback(
+                    self,
+                    InstError::Link("table size exceeds implementation limit".into()),
+                );
             }
             let mut elems = Vec::new();
             if elems.try_reserve_exact(t.limits.min as usize).is_err() {
-                return Err(InstError::Link("cannot allocate table".into()));
+                return rollback(self, InstError::Link("cannot allocate table".into()));
             }
             elems.resize(t.limits.min as usize, Value::null_of(t.elem));
             self.tables.push(TableInst { ty: *t, elems });
@@ -269,13 +300,14 @@ impl Store {
         for mt in &module.mems {
             let addr = self.mems.len();
             let Some(bytes) = mem_bytes(mt.limits.min) else {
-                return Err(InstError::Link(
-                    "memory size exceeds addressable range".into(),
-                ));
+                return rollback(
+                    self,
+                    InstError::Link("memory size exceeds addressable range".into()),
+                );
             };
             let mut data = Vec::new();
             if data.try_reserve_exact(bytes).is_err() {
-                return Err(InstError::Link("cannot allocate memory".into()));
+                return rollback(self, InstError::Link("cannot allocate memory".into()));
             }
             data.resize(bytes, 0);
             self.mems.push(MemInst { ty: *mt, data });

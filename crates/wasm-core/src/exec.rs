@@ -463,8 +463,9 @@ impl<'s> Machine<'s> {
                 {
                     return Err(trap("out of bounds table access"));
                 }
-                let src: Vec<Value> = seg[s as usize..(s + n) as usize].to_vec();
-                self.store.tables[ta].elems[d as usize..(d + n) as usize].copy_from_slice(&src);
+                let (s, n, d) = (s as usize, n as usize, d as usize);
+                let src: Vec<Value> = seg[s..s + n].to_vec();
+                self.store.tables[ta].elems[d..d + n].copy_from_slice(&src);
             }
             Instr::ElemDrop { elem } => {
                 let inst = self.frame().inst;
@@ -484,9 +485,13 @@ impl<'s> Machine<'s> {
                 {
                     return Err(trap("out of bounds table access"));
                 }
-                let chunk: Vec<Value> =
-                    self.store.tables[sa].elems[s as usize..(s + n) as usize].to_vec();
-                self.store.tables[da].elems[d as usize..(d + n) as usize].copy_from_slice(&chunk);
+                let (s, n, d) = (s as usize, n as usize, d as usize);
+                if sa == da {
+                    self.store.tables[sa].elems.copy_within(s..s + n, d);
+                } else {
+                    let chunk: Vec<Value> = self.store.tables[sa].elems[s..s + n].to_vec();
+                    self.store.tables[da].elems[d..d + n].copy_from_slice(&chunk);
+                }
             }
             Instr::TableGrow { table } => {
                 let a = self.store.instances[self.frame().inst].table_addrs[*table as usize];
@@ -629,8 +634,9 @@ impl<'s> Machine<'s> {
                 {
                     return Err(trap("out of bounds memory access"));
                 }
-                let chunk: Vec<u8> = seg[s as usize..(s + n) as usize].to_vec();
-                self.store.mems[a].data[d as usize..(d + n) as usize].copy_from_slice(&chunk);
+                let (s, n, d) = (s as usize, n as usize, d as usize);
+                let chunk: Vec<u8> = seg[s..s + n].to_vec();
+                self.store.mems[a].data[d..d + n].copy_from_slice(&chunk);
             }
             Instr::DataDrop { data } => {
                 let inst = self.frame().inst;
@@ -649,8 +655,8 @@ impl<'s> Machine<'s> {
                 {
                     return Err(trap("out of bounds memory access"));
                 }
-                mem.data
-                    .copy_within(s as usize..(s + n) as usize, d as usize);
+                let (s, n, d) = (s as usize, n as usize, d as usize);
+                mem.data.copy_within(s..s + n, d);
             }
             Instr::MemoryFill => {
                 let a = self.mem_addr();
@@ -661,7 +667,8 @@ impl<'s> Machine<'s> {
                 if u64::from(d) + u64::from(n) > mem.data.len() as u64 {
                     return Err(trap("out of bounds memory access"));
                 }
-                mem.data[d as usize..(d + n) as usize].fill(v);
+                let (n, d) = (n as usize, d as usize);
+                mem.data[d..d + n].fill(v);
             }
             Instr::I32Const(v) => self.push_i32(*v),
             Instr::I64Const(v) => self.push_i64(*v),
