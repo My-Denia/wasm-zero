@@ -166,16 +166,18 @@ Python 3、curl、git）：
 
 ```sh
 git clone https://github.com/My-Denia/wasm-zero.git && cd wasm-zero
+git checkout 3d06be16   # PR #1 合并 SHA：产生下述冻结数字的版本
 scripts/fetch_spec.sh && scripts/fetch_wabt.sh && scripts/convert_corpus.sh
 cargo run --release -p spec-runner -- \
   --expect-total 54006 --expect-unsupported 1091 --ledger-out build/ledger.json
 python scripts/enum_corpus.py --ledger build/ledger.json
 ```
 
+（`git checkout 3d06be16` 将复现锚定在产生冻结结果的合并版本上；
+直接在 main 最新提交上运行同样受 CI 同款硬门保护。）
 后两条命令在任何 FAIL 或记账不一致时以非零退出。合并当日的
 fresh-checkout 复现记录（25 秒全管线）在
-[evidence.md](../goal-runs/wasm-zero-oneshot/evidence.md)；
-2026-07-19 又在另一台目录做过一次全新克隆复现，结果一致。
+[evidence.md](../goal-runs/wasm-zero-oneshot/evidence.md)。
 
 负向对照（证明记账器不是摆设）：
 

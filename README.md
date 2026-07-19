@@ -34,8 +34,10 @@ This repo is simultaneously two deliverables:
 2. **An autonomous-agent experiment** — the entire implementation was
    produced in a single-spec autonomous run: one human-written
    specification in, merged and reproducible repo out, with zero
-   technical guidance and zero hand-written code. Human input was
-   limited to permission/environment unlocks (3 recorded interventions).
+   technical guidance and zero hand-written code. Counted human
+   interventions: 3, all permission/environment unlocks; the log also
+   discloses one non-counted exchange (the user relayed public
+   review-bot comments, which the agent re-fetched independently).
    See [Provenance](#provenance-single-spec-autonomous-run) and the
    frozen run records under
    [`goal-runs/wasm-zero-oneshot/`](goal-runs/wasm-zero-oneshot/).
